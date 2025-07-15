@@ -1,28 +1,62 @@
-const express = require('express');
-const cors = require('cors');
-const { exec } = require('child_process');
-const app = express();
+const express = require("express");
+const axios = require("axios");
+const cors = require("cors");
 
+const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.post('/claude', (req, res) => {
-  const { prompt } = req.body;
-  const safePrompt = prompt.replace(/["$`]/g, ''); // sanitize
+// ✅ Environment Variables
+const API_URL = process.env.ANTHROPIC_BASE_URL || "https://anyrouter.top";
+const API_KEY = process.env.ANTHROPIC_AUTH_TOKEN;
 
-  const command = `
-    ANTHROPIC_AUTH_TOKEN=${process.env.ANTHROPIC_AUTH_TOKEN} \
-    ANTHROPIC_BASE_URL=${process.env.ANTHROPIC_BASE_URL} \
-    npx claude <<< "${safePrompt}"
-  `;
+// ✅ Claude 4 (Opus) Proxy Endpoint
+app.post("/claude", async (req, res) => {
+  try {
+    const { prompt } = req.body;
 
-  exec(command, (err, stdout, stderr) => {
-    if (err || stderr) {
-      return res.status(500).send(stderr || err.message);
+    if (!prompt) {
+      return res.status(400).json({ error: "Prompt is required." });
     }
-    res.send(stdout);
-  });
+
+    const response = await axios.post(
+      `${API_URL}/v1/messages`,
+      {
+        prompt: prompt,
+        model: "claude-opus-4-20250514",  // 🆕 Claude 4 (Opus) model ID
+        max_tokens: 1000
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${API_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    res.json(response.data);
+  } catch (error) {
+    console.error("Claude API Error:", error.message);
+    res.status(500).json({
+      error: "Claude API call failed.",
+      detail: error.message
+    });
+  }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// ✅ Homepage Route for Browser Visit
+app.get("/", (req, res) => {
+  res.send(`
+    <h2>✅ Claude API Proxy (Claude 4 Ready)</h2>
+    <p>Send <code>POST</code> requests to <code>/claude</code> with a JSON body:</p>
+    <pre>{
+  "prompt": "Your message here"
+}</pre>
+  `);
+});
+
+// ✅ Dynamic Port (for Railway, etc.)
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => {
+  console.log(`🚀 Claude 4 Proxy Server running on port ${PORT}`);
+});
